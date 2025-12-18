@@ -1,181 +1,174 @@
-# Generation ID: Hutch_1765415473877_7ifzxg1wu (前半)
+# Othello AI : 指定仕様準拠
+# 6x6 / 8x8 対応
+# BLACK = 1, WHITE = 2, EMPTY = 0
 
-from collections import deque
-from copy import deepcopy
+import copy
 
-def myai(board, color):
-    """
-    オセロAI: 序盤～終盤に応じた戦略で最適な手を返す
-    """
+EMPTY = 0
+BLACK = 1
+WHITE = 2
 
-    evaluation_table = [
-        [10, 5, 5, 5, 5, 10],
-        [5, 1, 2, 2, 1, 5],
-        [5, 2, 0, 0, 2, 5],
-        [5, 2, 0, 0, 2, 5],
-        [5, 1, 2, 2, 1, 5],
-        [10, 5, 5, 5, 5, 10]
-    ]
+DIRECTIONS = [
+    (-1,-1),(-1,0),(-1,1),
+    (0,-1),        (0,1),
+    (1,-1),(1,0),(1,1)
+]
 
-    opponent_color = 3 - color
-    move_count = count_stones(board)
-
-    if move_count <= 8:
-        depth = 3
-        use_min_stones = True
-    elif move_count <= 20:
-        depth = 5
-        use_min_stones = False
-    else:
-        depth = 5
-        use_min_stones = False
-
-    valid_moves = get_valid_moves(board, color)
-
-    if not valid_moves:
-        return None
-
-    best_move = None
-    best_score = float('-inf')
-
-    for move in valid_moves:
-        score = bfs_evaluate(board, color, move, depth, evaluation_table, use_min_stones)
-
-        if score > best_score:
-            best_score = score
-            best_move = move
-
-    return best_move
+# ---------------- 基本 ----------------
+def size(board):
+    return len(board)
 
 
-def count_stones(board):
-    """盤面の総石数を計算"""
-    count = 0
-    for row in board:
-        for cell in row:
-            if cell != 0:
-                count += 1
-    return count
+def inside(x, y, n):
+    return 0 <= x < n and 0 <= y < n
 
 
-def get_valid_moves(board, color):
-    """指定された色の有効な手をすべて取得"""
-    valid_moves = []
-    for row in range(6):
-        for col in range(6):
-            if board[row][col] == 0 and is_valid_move(board, row, col, color):
-                valid_moves.append((col, row))
-    return valid_moves
+def opponent(color):
+    return BLACK if color == WHITE else WHITE
 
-
-def is_valid_move(board, row, col, color):
-    """指定位置が有効な手かチェック"""
-    if board[row][col] != 0:
+# ---------------- 合法手 ----------------
+def is_valid(board, x, y, color):
+    n = size(board)
+    if not inside(x, y, n) or board[x][y] != EMPTY:
         return False
-
-    opponent = 3 - color
-    directions = [(-1, -1), (-1, 0), (-1, 1), (0, -1), (0, 1), (1, -1), (1, 0), (1, 1)]
-
-    for dr, dc in directions:
-        if has_flippable(board, row, col, dr, dc, color, opponent):
+    opp = opponent(color)
+    for dx, dy in DIRECTIONS:
+        nx, ny = x+dx, y+dy
+        found = False
+        while inside(nx, ny, n) and board[nx][ny] == opp:
+            found = True
+            nx += dx
+            ny += dy
+        if found and inside(nx, ny, n) and board[nx][ny] == color:
             return True
-
     return False
 
 
-def has_flippable(board, row, col, dr, dc, color, opponent):
-    """指定方向に反転できる石があるかチェック"""
-    r, c = row + dr, col + dc
-    found_opponent = False
+def legal_moves(board, color):
+    n = size(board)
+    return [(x,y) for x in range(n) for y in range(n)
+            if is_valid(board, x, y, color)]
 
-    while 0 <= r < 6 and 0 <= c < 6:
-        if board[r][c] == 0:
-            return False
-        if board[r][c] == opponent:
-            found_opponent = True
-        elif board[r][c] == color:
-            return found_opponent
-        r += dr
-        c += dc
+# ---------------- 着手 ----------------
+def put(board, x, y, color):
+    n = size(board)
+    b = copy.deepcopy(board)
+    b[x][y] = color
+    opp = opponent(color)
+    for dx, dy in DIRECTIONS:
+        nx, ny = x+dx, y+dy
+        path = []
+        while inside(nx, ny, n) and b[nx][ny] == opp:
+            path.append((nx, ny))
+            nx += dx
+            ny += dy
+        if path and inside(nx, ny, n) and b[nx][ny] == color:
+            for px, py in path:
+                b[px][py] = color
+    return b
 
-    return False
+# ---------------- 評価 ----------------
+WEIGHT_6 = [
+    [100,-20,10,10,-20,100],
+    [-20,-50,-2,-2,-50,-20],
+    [10,-2,-1,-1,-2,10],
+    [10,-2,-1,-1,-2,10],
+    [-20,-50,-2,-2,-50,-20],
+    [100,-20,10,10,-20,100]
+]
 
-
-def place_stone(board, row, col, color):
-    """石を配置し、反転可能な石をすべて反転"""
-    board[row][col] = color
-    opponent = 3 - color
-    directions = [(-1, -1), (-1, 0), (-1, 1), (0, -1), (0, 1), (1, -1), (1, 0), (1, 1)]
-
-    for dr, dc in directions:
-        flip_stones(board, row, col, dr, dc, color, opponent)
-
-
-def flip_stones(board, row, col, dr, dc, color, opponent):
-    """指定方向の石を反転"""
-    positions = []
-    r, c = row + dr, col + dc
-
-    while 0 <= r < 6 and 0 <= c < 6 and board[r][c] == opponent:
-        positions.append((r, c))
-        r += dr
-        c += dc
-
-    if 0 <= r < 6 and 0 <= c < 6 and board[r][c] == color:
-        for pr, pc in positions:
-            board[pr][pc] = color
-
-
-def bfs_evaluate(board, color, move, depth, eval_table, use_min_stones):
-    """幅優先探索で手を評価"""
-    queue = deque()
-    board_copy = deepcopy(board)
-    place_stone(board_copy, move[1], move[0], color)
-
-    queue.append((board_copy, color, 1))
-
-    scores = []
-
-    while queue:
-        current_board, current_color, current_depth = queue.popleft()
-
-        if current_depth == depth:
-            scores.append(evaluate_board(current_board, eval_table))
-            continue
-
-        next_color = 3 - current_color
-        next_moves = get_valid_moves(current_board, next_color)
-
-        if not next_moves:
-            next_moves_alt = get_valid_moves(current_board, current_color)
-            if next_moves_alt:
-                next_color = current_color
-                next_moves = next_moves_alt
-            else:
-                scores.append(evaluate_board(current_board, eval_table))
-                continue
-
-        for next_move in next_moves:
-            new_board = deepcopy(current_board)
-            place_stone(new_board, next_move[1], next_move[0], next_color)
-            queue.append((new_board, next_color, current_depth + 1))
-
-    if not scores:
-        return evaluate_board(board_copy, eval_table)
-
-    if use_min_stones:
-        return min(scores)
-    else:
-        return max(scores)
+WEIGHT_8 = [
+    [100,-20,10, 5, 5,10,-20,100],
+    [-20,-50,-2,-2,-2,-2,-50,-20],
+    [10,-2,-1,-1,-1,-1,-2,10],
+    [5,-2,-1,-1,-1,-1,-2,5],
+    [5,-2,-1,-1,-1,-1,-2,5],
+    [10,-2,-1,-1,-1,-1,-2,10],
+    [-20,-50,-2,-2,-2,-2,-50,-20],
+    [100,-20,10,5,5,10,-20,100]
+]
 
 
-def evaluate_board(board, eval_table):
-    """評価表に基づいて盤面を評価"""
+def evaluate(board, color):
+    n = size(board)
+    W = WEIGHT_6 if n == 6 else WEIGHT_8
+    opp = opponent(color)
     score = 0
-    for row in range(6):
-        for col in range(6):
-            if board[row][col] != 0:
-                score += eval_table[row][col]
+    for i in range(n):
+        for j in range(n):
+            if board[i][j] == color:
+                score += W[i][j]
+            elif board[i][j] == opp:
+                score -= W[i][j]
+    # mobility
+    score += 2 * (len(legal_moves(board, color))
+                  - len(legal_moves(board, opp)))
     return score
 
-# Generation ID: Hutch_1765415473877_7ifzxg1wu (後半)
+# ---------------- 終盤完全読み ----------------
+def disc_diff(board, color):
+    opp = opponent(color)
+    s = 0
+    for row in board:
+        for c in row:
+            if c == color: s += 1
+            elif c == opp: s -= 1
+    return s
+
+
+def exact(board, color):
+    moves = legal_moves(board, color)
+    opp = opponent(color)
+    if not moves:
+        if not legal_moves(board, opp):
+            return disc_diff(board, color)
+        return -exact(board, opp)
+    best = -10**9
+    for x,y in moves:
+        v = -exact(put(board,x,y,color), opp)
+        best = max(best, v)
+    return best
+
+# ---------------- αβ探索 ----------------
+def alphabeta(board, depth, a, b, color):
+    moves = legal_moves(board, color)
+    opp = opponent(color)
+    if depth == 0 or not moves:
+        return evaluate(board, color), None
+    best_move = None
+    for x,y in moves:
+        v,_ = alphabeta(put(board,x,y,color), depth-1, -b, -a, opp)
+        v = -v
+        if v > a:
+            a = v
+            best_move = (x,y)
+        if a >= b:
+            break
+    return a, best_move
+
+# ---------------- AI本体 ----------------
+def myai(board, color):
+    moves = legal_moves(board, color)
+    if not moves:
+        return None
+
+    empty = sum(r.count(EMPTY) for r in board)
+    opp = opponent(color)
+
+    # 残り8手：完全読み
+    if empty <= 8:
+        best = -10**9
+        best_move = None
+        for x,y in moves:
+            v = -exact(put(board,x,y,color), opp)
+            if v > best:
+                best = v
+                best_move = (y, x)  # column, row
+        return best_move
+
+    # 残り18手：深さ6
+    depth = 6 if empty <= 18 else 4
+    _, move = alphabeta(board, depth, -10**9, 10**9, color)
+
+    # 出力は {column, row}
+    return (move[1], move[0])
